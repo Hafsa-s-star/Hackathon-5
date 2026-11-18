@@ -327,6 +327,12 @@ body { background: #f4f6fa; }
 .action-symbol.purple { color: #6678d8; background: #f0efff; }
 .action-row:hover { background: #f8faff; }
 .text-link, .empty-chart a, .table-empty a, .table-empty .text-link { color: #346fe0; }
+.stockwise-alert { border-radius: 12px; font-family: inherit; }
+.stockwise-alert-title { color: #202c29; font-size: 19px; font-weight: 650; }
+.stockwise-alert-message { color: #718078; font-size: 12px; }
+.stockwise-alert-confirm, .stockwise-alert-cancel { min-height: 36px; padding: 0 15px; border: 0; border-radius: 7px; font: inherit; font-size: 11px; font-weight: 650; }
+.stockwise-alert-confirm { color: #fff; background: #3978ee; }
+.stockwise-alert-cancel { margin-right: 8px; color: #52615b; background: #eef1f0; }
 .search-field:focus-within { border-color: #9ab7fa; box-shadow: 0 0 0 3px #e8efff; }
 .search-field:focus-within svg { color: #3978ee; }
 .product-thumb, .product-cell img { color: #4777d7; background: #edf2ff; }
@@ -363,6 +369,7 @@ body { background: #f4f6fa; }
 .order-lines-heading { display: flex; align-items: center; justify-content: space-between; padding-bottom: 5px; border-bottom: 1px solid #edf0ef; color: #99a39e; font-size: 9px; font-weight: 750; letter-spacing: .8px; }
 .order-lines { display: grid; gap: 8px; }
 .order-line { display: grid; grid-template-columns: minmax(0, 1fr) 75px 90px 28px; align-items: center; gap: 8px; }
+.supply-line { grid-template-columns: minmax(0, 1fr) 75px 28px; }
 .order-line select, .order-line input { min-width: 0; height: 35px; padding: 0 8px; border: 1px solid #e3e9e5; border-radius: 6px; color: #52615b; background: #fff; font-size: 9px; outline: 0; }
 .order-line select:focus, .order-line input:focus { border-color: #93aff2; }
 .order-line > strong { color: #46576c; text-align: right; font-size: 10px; }
@@ -371,6 +378,7 @@ body { background: #f4f6fa; }
 .order-total span { color: #455369; font-size: 10px; font-weight: 650; }
 .order-total small { display: block; margin-top: 4px; color: #8995a8; font-size: 9px; font-weight: 450; }
 .order-total > strong { color: #2d63c5; font-size: 14px; }
+.form-hint { margin: 0; color: #8995a8; font-size: 9px; }
 .current-image { display: flex; align-items: center; gap: 10px; color: #8c98a9; font-size: 9px; }
 .current-image img { width: 36px; height: 36px; border-radius: 6px; object-fit: cover; }
 .profile-panel { max-width: 760px; }

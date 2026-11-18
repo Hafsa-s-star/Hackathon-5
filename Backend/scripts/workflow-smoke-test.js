@@ -136,6 +136,8 @@ try {
   const managerWarehouses = await request(base, "/warehouses", "GET", undefined, manager);
   verify(managerWarehouses.status === 200 && managerWarehouses.data.warehouses.length === 1,
     "Manager sees assigned warehouse only");
+  verify((await request(base, "/warehouses", "GET", undefined, supplier)).data.warehouses.length === 2,
+    "Supplier can choose from multiple real warehouses");
 
   const laptopCreated = await request(base, "/products", "POST", {
     name: "Laptop", sku: `EVAL-${Date.now()}`, category: "Computers", price: 80000, lowStockLimit: 5
@@ -189,6 +191,10 @@ try {
   verify((await request(base, "/orders", "GET", undefined, otherSales)).data.orders.length === 0,
     "Sales representatives see only their own orders");
 
+  const lowProduct = await request(base, "/products", "POST", {
+    name: "Mouse", sku: `EVAL-M-${Date.now()}`, category: "Accessories", price: 1000, lowStockLimit: 5
+  }, admin);
+  verify(lowProduct.status === 201, "Admin creates a second product for multi-line request testing");
   const requestCreated = await request(base, "/supply-requests", "POST", {
     product: laptop, warehouse, quantity: 10
   }, supplier);
@@ -208,10 +214,13 @@ try {
     "Admin can approve a supplier request");
   verify((await Stock.findOne({ product: laptop, warehouse })).quantity === 25,
     "Approval adds supply quantity to inventory");
+  const batchRequests = await request(base, "/supply-requests", "POST", {
+    warehouse,
+    items: [{ product: laptop, quantity: 2 }, { product: lowProduct.data.product._id, quantity: 3 }]
+  }, supplier);
+  verify(batchRequests.status === 201 && batchRequests.data.requests.length === 2,
+    "Supplier can submit multiple product lines as separate supply requests");
 
-  const lowProduct = await request(base, "/products", "POST", {
-    name: "Mouse", sku: `EVAL-M-${Date.now()}`, category: "Accessories", price: 1000, lowStockLimit: 5
-  }, admin);
   await request(base, "/stock/in", "POST", { product: lowProduct.data.product._id, warehouse, quantity: 4 }, manager);
   verify((await request(base, "/stock/low", "GET", undefined, manager)).data.stock.some(row => row.product.sku.startsWith("EVAL-M-")),
     "Low-stock endpoint reports quantities below the threshold");

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowDownUp, Check, CirclePlus, Package, Pencil, Plus, Search, Trash2, X } from "lucide-react";
-import toast from "react-hot-toast";
 import Modal from "../components/Modal";
 import api from "../services/api";
 import { uploadImage } from "../services/imagekit";
 import useAuth from "../context/useAuth";
+import { confirmAction, showError, showSuccess } from "../services/alerts";
 
 const config = {
   products: {
@@ -42,8 +42,7 @@ const config = {
   supplies: {
     title: "Supply requests", description: "Request product replenishment and review incoming deliveries.", endpoint: "/supply-requests", key: "requests", create: "New request",
     fields: [
-      { name: "product", label: "Product", type: "product", required: true }, { name: "warehouse", label: "Deliver to", type: "warehouse", required: true },
-      { name: "quantity", label: "Quantity", type: "number", required: true }
+      { name: "warehouse", label: "Deliver to", type: "warehouse", required: true }
     ]
   },
   team: {
@@ -92,7 +91,7 @@ export default function Workspace({ section }) {
       setData(response[spec.key] || []);
       if (section === "stock") setTransactions(response.transactions || []);
     } catch (error) {
-      toast.error(error.response?.data?.message || `Could not load ${spec.title.toLowerCase()}`);
+      showError(error.response?.data?.message || `Could not load ${spec.title.toLowerCase()}`);
     } finally {
       setLoading(false);
     }
@@ -108,14 +107,15 @@ export default function Workspace({ section }) {
         }
       })
       .catch(error => {
-        if (active) toast.error(error.response?.data?.message || `Could not load ${spec.title.toLowerCase()}`);
+        if (active) showError(error.response?.data?.message || `Could not load ${spec.title.toLowerCase()}`);
       })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [spec.endpoint, spec.key, spec.title, section]);
   useEffect(() => {
     const calls = [];
-    if (spec.fields.some(field => ["product", "warehouse"].includes(field.type)) ||
+    if (section === "orders" || section === "supplies" ||
+        spec.fields.some(field => ["product", "warehouse"].includes(field.type)) ||
         isAdmin && spec.fields.some(field => field.type === "supplier")) {
       calls.push(api.get("/products").then(({ data }) => setOptions(previous => ({ ...previous, products: data.products }))));
     }
@@ -126,7 +126,7 @@ export default function Workspace({ section }) {
       calls.push(api.get("/users").then(({ data }) => setOptions(previous => ({ ...previous, users: data.users }))));
     }
     if (section === "orders") calls.push(api.get("/stock").then(({ data }) => setInventory(data.stock)));
-    Promise.all(calls).catch(error => toast.error(error.response?.data?.message || "Form options could not be loaded"));
+    Promise.all(calls).catch(error => showError(error.response?.data?.message || "Form options could not be loaded"));
   }, [spec, section, isAdmin]);
 
   const categories = useMemo(() => [...new Set(data.map(item => item.category).filter(Boolean))].sort(), [data]);
@@ -148,6 +148,7 @@ export default function Workspace({ section }) {
     if (section === "stock") values.transactionType = "stock-in";
     if (section === "team" && !item) values.role = "salesRepresentative";
     if (section === "orders") values.products = [{ product: "", quantity: 1 }];
+    if (section === "supplies") values.items = [{ product: "", quantity: 1 }];
     setForm(values);
     setModal(true);
   }
@@ -164,6 +165,9 @@ export default function Workspace({ section }) {
       if (section === "orders") {
         payload.products = form.products.map(item => ({ product: item.product, quantity: Number(item.quantity) }));
       }
+      if (section === "supplies") {
+        payload.items = form.items.map(item => ({ product: item.product, quantity: Number(item.quantity) }));
+      }
       if (section === "stock") {
         const path = form.transactionType === "stock-in" ? "in" : "out";
         delete payload.transactionType;
@@ -173,54 +177,70 @@ export default function Workspace({ section }) {
       } else {
         await api.post(spec.endpoint, payload);
       }
-      toast.success(`${section === "orders" ? "Order" : section === "supplies" ? "Supply request" : editing ? spec.title.slice(0, -1) : spec.title.slice(0, -1)} ${editing ? "updated" : "created"}`);
+      const recordName = section === "orders" ? "Order" : section === "supplies" ? "Supply requests" : spec.title.slice(0, -1);
+      showSuccess(`${recordName} ${editing ? "updated" : "created"}`);
       setModal(false);
       await load();
     } catch (error) {
-      toast.error(error.response?.data?.message || error.message || "Could not save this record");
+      showError(error.response?.data?.message || error.message || "Could not save this record");
     }
   }
 
   async function changeStatus(id, status) {
+    if (status === "Processing" && !await confirmAction({
+      title: "Process this order?",
+      text: "Processing deducts the ordered quantities from warehouse stock.",
+      confirmText: "Process order"
+    })) return;
     try {
       await api.put(`/orders/${id}/status`, { status });
-      toast.success(status === "Processing" ? "Order processed and stock deducted" : "Order completed");
+      showSuccess(status === "Processing" ? "Order processed and stock deducted" : "Order completed");
       await load();
     } catch (error) {
-      toast.error(error.response?.data?.message || "Order status could not be updated");
+      showError(error.response?.data?.message || "Order status could not be updated");
     }
   }
 
   async function cancelOrder(id) {
-    if (!window.confirm("Cancel this order?")) return;
+    if (!await confirmAction({ title: "Cancel this order?", text: "This action cannot be undone.", confirmText: "Cancel order" })) return;
     try {
       await api.put(`/orders/${id}/cancel`);
-      toast.success("Order cancelled");
+      showSuccess("Order cancelled");
       await load();
     } catch (error) {
-      toast.error(error.response?.data?.message || "Order could not be cancelled");
+      showError(error.response?.data?.message || "Order could not be cancelled");
     }
   }
 
   async function reviewRequest(id, status) {
+    const approved = status === "Approved";
+    if (!await confirmAction({
+      title: `${approved ? "Approve" : "Reject"} this supply request?`,
+      text: approved ? "Approval adds the requested quantity to warehouse stock." : "The supplier will see this request as rejected.",
+      confirmText: `${approved ? "Approve" : "Reject"} request`
+    })) return;
     try {
       await api.put(`/supply-requests/${id}/status`, { status });
-      toast.success(`Supply request ${status.toLowerCase()}`);
+      showSuccess(`Supply request ${status.toLowerCase()}`);
       await load();
     } catch (error) {
-      toast.error(error.response?.data?.message || "Request could not be updated");
+      showError(error.response?.data?.message || "Request could not be updated");
     }
   }
 
   async function remove(id) {
     const endpoint = section === "products" ? "/products" : section === "warehouses" ? "/warehouses" : "/users";
-    if (!window.confirm(`Delete this ${section === "team" ? "team member" : section.slice(0, -1)}? This cannot be undone.`)) return;
+    if (!await confirmAction({
+      title: `Delete this ${section === "team" ? "team member" : section.slice(0, -1)}?`,
+      text: "This action cannot be undone.",
+      confirmText: "Delete"
+    })) return;
     try {
       await api.delete(`${endpoint}/${id}`);
-      toast.success("Record deleted");
+      showSuccess("Record deleted");
       await load();
     } catch (error) {
-      toast.error(error.response?.data?.message || "Record could not be deleted");
+      showError(error.response?.data?.message || "Record could not be deleted");
     }
   }
 
@@ -300,7 +320,7 @@ export default function Workspace({ section }) {
                   </select> :
                 ["select", "product", "warehouse", "manager", "supplier"].includes(field.type) ?
                   <select required={field.required} value={form[field.name] || ""} onChange={event => setForm({ ...form, [field.name]: event.target.value })}>
-                    {(field.type === "select" ? field.options : field.type === "product" ? options.products.map(item => [item._id, `${item.name} · ${item.sku}`]) : field.type === "warehouse" ? options.warehouses.map(item => [item._id, item.name]) : field.type === "supplier" ? [["", "No supplier"], ...options.users.filter(item => item.role === "supplier").map(item => [item._id, item.name])] : [["", "Unassigned"], ...options.users.filter(item => item.role === "warehouseManager").map(item => [item._id, item.name])]).map(([value, label]) => <option value={value} key={value || "empty"}>{label}</option>)}
+                    {(field.type === "select" ? field.options : field.type === "product" ? [["", "Select product"], ...options.products.map(item => [item._id, `${item.name} · ${item.sku}`])] : field.type === "warehouse" ? [["", options.warehouses.length ? `Select warehouse (${options.warehouses.length} available)` : "No warehouses available to your account"], ...options.warehouses.map(item => [item._id, `${item.name} · ${item.location}`])] : field.type === "supplier" ? [["", "No supplier"], ...options.users.filter(item => item.role === "supplier").map(item => [item._id, item.name])] : [["", "Unassigned"], ...options.users.filter(item => item.role === "warehouseManager").map(item => [item._id, item.name])]).map(([value, label]) => <option value={value} key={value || "empty"}>{label}</option>)}
                   </select> :
                   <input required={field.required} type={field.type || "text"} min={field.type === "number" ? 0 : undefined} step={field.type === "number" && ["price"].includes(field.name) ? "0.01" : field.type === "number" ? "1" : undefined} accept={field.type === "file" ? "image/png,image/jpeg,image/webp" : undefined} value={field.type === "file" ? undefined : form[field.name] || ""} onChange={event => setForm({ ...form, [field.name]: field.type === "file" ? event.target.files?.[0] : event.target.value })} />
               }
@@ -310,7 +330,9 @@ export default function Workspace({ section }) {
             <div className="order-lines-heading"><span>PRODUCTS IN THIS ORDER</span><button type="button" className="text-link" onClick={() => setForm({ ...form, products: [...form.products, { product: "", quantity: 1 }] })}><Plus size={14} /> Add product</button></div>
             <div className="order-lines">{(form.products || []).map((line, index) => {
               const product = options.products.find(item => item._id === line.product);
-              const stockAtWarehouse = inventory.find(stock => stock.product?._id === line.product && stock.warehouse?._id === form.warehouse)?.quantity;
+              const stockAtWarehouse = form.warehouse
+                ? inventory.find(stock => stock.product?._id === line.product && stock.warehouse?._id === form.warehouse)?.quantity || 0
+                : 0;
               return <div className="order-line" key={index}>
                 <select required value={line.product} onChange={event => setForm({ ...form, products: form.products.map((item, row) => row === index ? { ...item, product: event.target.value } : item) })}>
                   <option value="">Select product</option>{options.products.map(item => <option key={item._id} value={item._id}>{item.name} · {item.sku} · {currency(item.price)}</option>)}
@@ -322,6 +344,17 @@ export default function Workspace({ section }) {
               </div>;
             })}</div>
             <div className="order-total"><span>Grand total <small>Stock is deducted when the order is processed.</small></span><strong>{currency(orderTotal)}</strong></div>
+          </>}
+          {section === "supplies" && <>
+            <div className="order-lines-heading"><span>PRODUCTS TO REQUEST</span><button type="button" className="text-link" onClick={() => setForm(previous => ({ ...previous, items: [...previous.items, { product: "", quantity: 1 }] }))}><Plus size={14} /> Add product</button></div>
+            <div className="order-lines">{(form.items || []).map((line, index) => <div className="order-line supply-line" key={index}>
+              <select required value={line.product} onChange={event => setForm(previous => ({ ...previous, items: previous.items.map((item, row) => row === index ? { ...item, product: event.target.value } : item) }))}>
+                <option value="">Select product</option>{options.products.map(item => <option key={item._id} value={item._id}>{item.name} · {item.sku}</option>)}
+              </select>
+              <input aria-label={`Quantity for product ${index + 1}`} required type="number" min="1" step="1" value={line.quantity} onChange={event => setForm(previous => ({ ...previous, items: previous.items.map((item, row) => row === index ? { ...item, quantity: event.target.value } : item) }))} />
+              {form.items.length > 1 && <button type="button" className="icon-button danger-icon" aria-label={`Remove product ${index + 1}`} onClick={() => setForm(previous => ({ ...previous, items: previous.items.filter((_, row) => row !== index) }))}><X size={15} /></button>}
+            </div>)}</div>
+            <p className="form-hint">Each product line creates a separate request for the selected warehouse.</p>
           </>}
           {section === "products" && editing?.imageUrl && <div className="current-image"><img src={editing.imageUrl} alt="" /><span>Current product image. Choose a file to replace it.</span></div>}
           <div className="modal-actions"><button type="button" className="button button-muted" onClick={() => setModal(false)}>Cancel</button><button className="button button-primary"><Plus size={16} /> {editing ? "Save changes" : "Save record"}</button></div>

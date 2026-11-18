@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import { ArrowRight, Boxes, ChartNoAxesCombined, ShieldCheck } from "lucide-react";
-import toast from "react-hot-toast";
 import useAuth from "../context/useAuth";
 import api from "../services/api";
+import { showError } from "../services/alerts";
 
 export default function Login() {
   const { user, loading, login, register } = useAuth();
@@ -23,7 +23,7 @@ export default function Login() {
         (error.code === "ERR_NETWORK"
           ? `Stockwise API is not reachable at ${api.defaults.baseURL}. Start the backend with npm run dev.`
           : "Sign-in failed. Check your credentials and try again.");
-      toast.error(message);
+      showError(message);
     } finally {
       setBusy(false);
     }

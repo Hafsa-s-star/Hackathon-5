@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Camera, Check, ShieldCheck } from "lucide-react";
-import toast from "react-hot-toast";
 import api from "../services/api";
 import useAuth from "../context/useAuth";
 import { uploadImage } from "../services/imagekit";
+import { showError, showSuccess } from "../services/alerts";
 
 const roleNames = { admin: "Administrator", warehouseManager: "Warehouse manager", supplier: "Supplier", salesRepresentative: "Sales representative" };
 
@@ -21,9 +21,9 @@ export default function Profile() {
       const { data } = await api.put("/users/me", { ...form, ...image });
       updateUser(data.user);
       setFile(null);
-      toast.success("Profile updated");
+      showSuccess("Profile updated");
     } catch (error) {
-      toast.error(error.response?.data?.message || error.message || "Profile could not be updated");
+      showError(error.response?.data?.message || error.message || "Profile could not be updated");
     } finally {
       setSaving(false);
     }

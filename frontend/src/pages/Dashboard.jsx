@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowDownRight, ArrowRight, ArrowUpRight, Boxes, ClipboardList, Package, Plus, Truck, Users, Warehouse } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Link } from "react-router-dom";
-import toast from "react-hot-toast";
 import api from "../services/api";
 import useAuth from "../context/useAuth";
+import { showError } from "../services/alerts";
 
 const money = amount => Number(amount || 0).toLocaleString("en-PK", { style: "currency", currency: "PKR", maximumFractionDigits: 0 });
 const emptyStats = Object.freeze({});
@@ -13,7 +13,7 @@ export default function Dashboard() {
   const { user } = useAuth();
   const [data, setData] = useState(null);
   useEffect(() => {
-    api.get("/dashboard").then(response => setData(response.data)).catch(error => toast.error(error.response?.data?.message || "Dashboard data could not be loaded"));
+    api.get("/dashboard").then(response => setData(response.data)).catch(error => showError(error.response?.data?.message || "Dashboard data could not be loaded"));
   }, []);
 
   const stats = data?.stats || emptyStats;

@@ -22,21 +22,53 @@ router.get("/", asyncHandler(async (req, res) => {
 }));
 
 router.post("/", allowRoles("supplier", "admin"), asyncHandler(async (req, res) => {
-  const { product, warehouse, quantity } = req.body;
-  const amount = Number(quantity);
-  if (!mongoose.isValidObjectId(product) || !mongoose.isValidObjectId(warehouse) || !Number.isInteger(amount) || amount < 1) {
-    return res.status(400).json({ message: "Product, warehouse, and positive whole-number quantity are required" });
+  const isBatch = Array.isArray(req.body.items);
+  const items = isBatch ? req.body.items : [req.body];
+  if (!items.length || items.length > 50) {
+    return res.status(400).json({ message: "Submit between 1 and 50 product lines per supply request" });
   }
-  if (!(await Warehouse.exists({ _id: warehouse }))) return res.status(404).json({ message: "Warehouse not found" });
-  const productRecord = await Product.findById(product);
-  if (!productRecord) return res.status(404).json({ message: "Product not found" });
-  if (req.user.role === "supplier" && productRecord.supplier &&
-      productRecord.supplier.toString() !== req.user._id.toString()) {
-    return res.status(403).json({ message: "You can only request supply for your associated products" });
+  const requests = [];
+  for (const item of items) {
+    const warehouse = item.warehouse || req.body.warehouse;
+    const quantity = Number(item.quantity);
+    if (!mongoose.isValidObjectId(item.product) || !mongoose.isValidObjectId(warehouse) ||
+        !Number.isInteger(quantity) || quantity < 1) {
+      return res.status(400).json({ message: "Each line requires a valid product, warehouse, and positive whole-number quantity" });
+    }
+    requests.push({ product: item.product, warehouse, quantity });
   }
-  const request = await SupplyRequest.create({ supplier: req.user._id, product, warehouse, quantity: amount });
-  await request.populate(["supplier", "product", "warehouse"]);
-  res.status(201).json({ request });
+
+  const warehouseIds = [...new Set(requests.map(item => item.warehouse))];
+  const existingWarehouses = await Warehouse.find({ _id: { $in: warehouseIds } }).select("_id");
+  if (existingWarehouses.length !== warehouseIds.length) return res.status(404).json({ message: "Warehouse not found" });
+
+  const productIds = [...new Set(requests.map(item => item.product))];
+  const products = await Product.find({ _id: { $in: productIds } }).select("supplier");
+  if (products.length !== productIds.length) return res.status(404).json({ message: "Product not found" });
+  if (req.user.role === "supplier") {
+    const productById = new Map(products.map(product => [product._id.toString(), product]));
+    if (requests.some(item => {
+      const product = productById.get(item.product);
+      return product.supplier && product.supplier.toString() !== req.user._id.toString();
+    })) {
+      return res.status(403).json({ message: "You can only request supply for your associated products" });
+    }
+  }
+
+  const session = await mongoose.startSession();
+  let createdRequests;
+  try {
+    await session.withTransaction(async () => {
+      createdRequests = await SupplyRequest.create(
+        requests.map(item => ({ ...item, supplier: req.user._id })),
+        { session, ordered: true }
+      );
+    });
+  } finally {
+    await session.endSession();
+  }
+  await Promise.all(createdRequests.map(request => request.populate(["supplier", "product", "warehouse"])));
+  res.status(201).json(isBatch ? { requests: createdRequests } : { request: createdRequests[0] });
 }));
 
 const reviewRequest = asyncHandler(async (req, res) => {
