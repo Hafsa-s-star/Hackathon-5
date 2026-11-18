@@ -1,7 +1,9 @@
 import axios from "axios";
 
 const configuredApiUrl = import.meta.env.VITE_API_URL?.trim();
-const apiUrl = configuredApiUrl
+const apiUrl = import.meta.env.PROD
+  ? "/api"
+  : configuredApiUrl
   ? configuredApiUrl.replace(/\/+$/, "")
   : "http://localhost:5000/api";
 

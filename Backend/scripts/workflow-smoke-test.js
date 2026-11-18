@@ -10,6 +10,8 @@ testUri.pathname = `/${database}`;
 process.env.MONGO_URI = testUri.toString();
 process.env.JWT_SECRET = "isolated-stockwise-workflow-check";
 process.env.CLIENT_URL = "http://localhost:5173/";
+const originalVercel = process.env.VERCEL;
+process.env.VERCEL = "1";
 
 const { default: connectDB } = await import("../src/config/db.js");
 const { default: app } = await import("../src/app.js");
@@ -35,10 +37,12 @@ async function request(base, path, method = "GET", body, cookie) {
     body: body === undefined ? undefined : JSON.stringify(body)
   });
   const text = await response.text();
+  const setCookie = response.headers.get("set-cookie");
   return {
     status: response.status,
     data: text ? JSON.parse(text) : {},
-    cookie: response.headers.get("set-cookie")?.split(";")[0]
+    cookie: setCookie?.split(";")[0],
+    setCookie
   };
 }
 
@@ -102,6 +106,10 @@ try {
   async function login(email) {
     const result = await request(base, "/auth/login", "POST", { email, password: "EvalPassword!2026" });
     assert.equal(result.status, 200, `Could not log in ${email}`);
+    if (email === adminUser.email) {
+      verify(result.setCookie.includes("SameSite=None") && result.setCookie.includes("Secure"),
+        "Vercel login cookie supports credentialed cross-site requests");
+    }
     return result.cookie;
   }
 
@@ -255,6 +263,8 @@ try {
   console.error(`WORKFLOW TEST FAILED: ${error.message}`);
   process.exitCode = 1;
 } finally {
+  if (originalVercel === undefined) delete process.env.VERCEL;
+  else process.env.VERCEL = originalVercel;
   if (server) await new Promise(resolve => server.close(resolve));
   if (mongoose.connection.readyState) {
     try {
