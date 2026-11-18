@@ -12,12 +12,32 @@ import dashboardRoutes from "./routes/dashboard.routes.js";
 import transactionRoutes from "./routes/transaction.routes.js";
 import uploadRoutes from "./routes/upload.routes.js";
 import errorHandler from "./middleware/errorHandler.js";
+import connectDB from "./config/db.js";
 
 const app = express();
-app.use(cors({ origin: process.env.CLIENT_URL || "http://localhost:5173", credentials: true }));
+const clientOrigins = (process.env.CLIENT_URL || "http://localhost:5173")
+  .split(",")
+  .map(value => value.trim())
+  .filter(Boolean)
+  .map(value => new URL(value).origin);
+app.use(cors({
+  origin: (origin, callback) => callback(null, !origin || clientOrigins.includes(origin)),
+  credentials: true
+}));
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
-app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
+app.get("/api/health", async (_req, res) => {
+  await connectDB();
+  res.json({ status: "ok" });
+});
+app.use("/api", async (_req, _res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/products", productRoutes);

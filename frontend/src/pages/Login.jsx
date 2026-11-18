@@ -19,9 +19,12 @@ export default function Login() {
       if (signup) await register(form);
       else await login({ email: form.email, password: form.password });
     } catch (error) {
+      const localApi = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/api$/i.test(api.defaults.baseURL);
       const message = error.response?.data?.message ||
         (error.code === "ERR_NETWORK"
-          ? `Stockwise API is not reachable at ${api.defaults.baseURL}. Start the backend with npm run dev.`
+          ? localApi
+            ? `Stockwise API is not reachable at ${api.defaults.baseURL}. Start the backend with npm run dev.`
+            : `Stockwise API is not reachable at ${api.defaults.baseURL}. Check the deployment and its /health endpoint.`
           : "Sign-in failed. Check your credentials and try again.");
       showError(message);
     } finally {

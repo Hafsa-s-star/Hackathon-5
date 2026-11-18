@@ -9,7 +9,7 @@ const testUri = new URL(sourceUri);
 testUri.pathname = `/${database}`;
 process.env.MONGO_URI = testUri.toString();
 process.env.JWT_SECRET = "isolated-stockwise-workflow-check";
-process.env.CLIENT_URL = "http://localhost:5173";
+process.env.CLIENT_URL = "http://localhost:5173/";
 
 const { default: connectDB } = await import("../src/config/db.js");
 const { default: app } = await import("../src/app.js");
@@ -81,6 +81,20 @@ try {
   server = app.listen(0);
   await new Promise(resolve => server.once("listening", resolve));
   const base = `http://127.0.0.1:${server.address().port}/api`;
+  verify((await request(base, "/health")).status === 200,
+    "API health endpoint confirms the MongoDB connection");
+  const corsPreflight = await fetch(`${base}/auth/login`, {
+    method: "OPTIONS",
+    headers: {
+      Origin: "http://localhost:5173",
+      "Access-Control-Request-Method": "POST",
+      "Access-Control-Request-Headers": "content-type"
+    }
+  });
+  verify(corsPreflight.status === 204 &&
+    corsPreflight.headers.get("access-control-allow-origin") === "http://localhost:5173" &&
+    corsPreflight.headers.get("access-control-allow-credentials") === "true",
+  "CORS normalizes configured frontend origins and permits credentialed requests");
   const adminUser = await User.create({
     name: "Eval Admin", email: "admin@stockwise.test", password: "EvalPassword!2026", role: "admin"
   });
