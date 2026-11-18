@@ -21,13 +21,13 @@ export default function App() {
       <Route element={<AppLayout />}>
         <Route index element={<Dashboard />} />
         <Route path="/products" element={<Workspace section="products" />} />
-        <Route path="/stock" element={<Workspace section="stock" />} />
+        <Route path="/stock" element={<RoleRoute roles={["admin", "warehouseManager", "salesRepresentative"]}><Workspace section="stock" /></RoleRoute>} />
         <Route path="/warehouses" element={<RoleRoute roles={["admin"]}><Workspace section="warehouses" /></RoleRoute>} />
-        <Route path="/orders" element={<Workspace section="orders" />} />
-        <Route path="/supplies" element={<Workspace section="supplies" />} />
+        <Route path="/orders" element={<RoleRoute roles={["admin", "warehouseManager", "salesRepresentative"]}><Workspace section="orders" /></RoleRoute>} />
+        <Route path="/supplies" element={<RoleRoute roles={["admin", "warehouseManager", "supplier"]}><Workspace section="supplies" /></RoleRoute>} />
         <Route path="/team" element={<RoleRoute roles={["admin"]}><Workspace section="team" /></RoleRoute>} />
         <Route path="/profile" element={<Profile />} />
-        <Route path="/transactions" element={<Workspace section="transactions" />} />
+        <Route path="/transactions" element={<RoleRoute roles={["admin", "warehouseManager"]}><Workspace section="transactions" /></RoleRoute>} />
       </Route>
     </Route>
     <Route path="*" element={<HomeRedirect />} />

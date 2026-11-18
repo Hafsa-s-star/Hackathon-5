@@ -16,6 +16,7 @@ const { default: app } = await import("../src/app.js");
 const { default: User } = await import("../src/models/User.js");
 const { default: Stock } = await import("../src/models/Stock.js");
 const { default: StockTransaction } = await import("../src/models/StockTransaction.js");
+const { imagePayload } = await import("../src/services/imagekit.js");
 const passed = [];
 let server;
 
@@ -42,6 +43,40 @@ async function request(base, path, method = "GET", body, cookie) {
 }
 
 try {
+  const originalFetch = globalThis.fetch;
+  const originalImageKitEndpoint = process.env.IMAGEKIT_URL_ENDPOINT;
+  const originalImageKitKey = process.env.IMAGEKIT_PRIVATE_KEY;
+  process.env.IMAGEKIT_URL_ENDPOINT = "https://ik.imagekit.io/stockwise-eval";
+  process.env.IMAGEKIT_PRIVATE_KEY = "workflow-test-key";
+  try {
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({ fileId: "verified-image-id", url: "https://ik.imagekit.io/stockwise-eval/profile.png" })
+    });
+    const verifiedImage = await imagePayload({
+      imageUrl: "https://ik.imagekit.io/stockwise-eval/profile.png?updatedAt=123",
+      imageFileId: "verified-image-id"
+    });
+    verify(verifiedImage.imageUrl === "https://ik.imagekit.io/stockwise-eval/profile.png",
+      "ImageKit URL variants are replaced with the canonical URL verified by file ID");
+
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({ fileId: "different-image-id", url: "https://ik.imagekit.io/stockwise-eval/profile.png" })
+    });
+    await assert.rejects(
+      imagePayload({ imageUrl: "https://ik.imagekit.io/stockwise-eval/profile.png", imageFileId: "verified-image-id" }),
+      error => error.status === 400
+    );
+    verify(true, "ImageKit rejects a file ID that does not match the verified asset");
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalImageKitEndpoint === undefined) delete process.env.IMAGEKIT_URL_ENDPOINT;
+    else process.env.IMAGEKIT_URL_ENDPOINT = originalImageKitEndpoint;
+    if (originalImageKitKey === undefined) delete process.env.IMAGEKIT_PRIVATE_KEY;
+    else process.env.IMAGEKIT_PRIVATE_KEY = originalImageKitKey;
+  }
+
   await connectDB();
   server = app.listen(0);
   await new Promise(resolve => server.once("listening", resolve));
@@ -161,6 +196,12 @@ try {
     "Supplier creates a pending supply request");
   verify((await request(base, "/supply-requests", "GET", undefined, supplier)).data.requests.length === 1,
     "Supplier sees own request history");
+  const supplierDashboard = await request(base, "/dashboard", "GET", undefined, supplier);
+  const managerDashboard = await request(base, "/dashboard", "GET", undefined, manager);
+  verify(supplierDashboard.data.stats.pendingRequests === 1 &&
+    supplierDashboard.data.recentRequests[0]._id === requestCreated.data.request._id &&
+    managerDashboard.data.stats.pendingRequests === 1,
+  "Supplier and assigned manager dashboards show their relevant pending supply request");
   verify((await request(base, "/orders", "GET", undefined, supplier)).status === 403,
     "Supplier cannot access sales order records");
   verify((await request(base, `/supply-requests/${requestCreated.data.request._id}/status`, "PUT", { status: "Approved" }, admin)).status === 200,
@@ -174,6 +215,10 @@ try {
   await request(base, "/stock/in", "POST", { product: lowProduct.data.product._id, warehouse, quantity: 4 }, manager);
   verify((await request(base, "/stock/low", "GET", undefined, manager)).data.stock.some(row => row.product.sku.startsWith("EVAL-M-")),
     "Low-stock endpoint reports quantities below the threshold");
+  verify((await request(base, "/dashboard", "GET", undefined, manager)).data.stats.lowStock === 1,
+    "Manager dashboard counts low stock only in assigned warehouses");
+  verify((await request(base, "/dashboard", "GET", undefined, supplier)).data.stats.lowStock === 0,
+    "Supplier dashboard does not show unrelated warehouse low-stock alerts");
   const dashboard = await request(base, "/dashboard", "GET", undefined, admin);
   verify(dashboard.status === 200 && dashboard.data.stats.users === 8 && dashboard.data.stats.suppliers === 2 &&
     dashboard.data.monthlySales.length === 6 && dashboard.data.stockMovements.length === 6,

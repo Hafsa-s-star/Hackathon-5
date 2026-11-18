@@ -115,6 +115,15 @@ a { color: inherit; text-decoration: none; }
 .empty-chart > span { max-width: 250px; margin-top: 5px; color: #929d98; font-size: 10px; }
 .empty-chart a, .table-empty a, .table-empty .text-link { display: inline-flex; align-items: center; gap: 5px; margin-top: 10px; color: #287c69; font-size: 10px; font-weight: 650; }
 .attention-panel .panel-heading { padding-bottom: 13px; }
+.action-panel { margin-top: 16px; }
+.action-list { display: grid; }
+.action-item { display: flex; min-height: 58px; align-items: center; gap: 12px; padding: 9px 19px; border-top: 1px solid #f0f2f1; color: #78857e; transition: background .15s; }
+.action-item > span:nth-child(2) { min-width: 0; flex: 1; }
+.action-item strong, .action-item small { display: block; }
+.action-item strong { color: #45534d; font-size: 10px; font-weight: 630; }
+.action-item small { margin-top: 4px; color: #9ba49f; font-size: 9px; }
+.action-item > svg { flex: 0 0 auto; color: #a9b1ad; }
+.action-item:hover { background: #fafcfb; }
 .count-pill { display: inline-grid; min-width: 22px; height: 22px; place-items: center; padding: 0 6px; border-radius: 11px; color: #87622f; background: #fbf3e7; font-size: 10px; font-weight: 650; }
 .action-row { display: flex; min-height: 59px; align-items: center; gap: 10px; padding: 0 18px; border-top: 1px solid #f0f2f1; }
 .action-symbol { display: grid; width: 30px; height: 30px; flex: 0 0 30px; place-items: center; border-radius: 8px; }
